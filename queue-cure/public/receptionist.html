@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Queue Cure — Reception Desk</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<div class="page">
+
+  <div class="top-row">
+    <div class="title-block">
+      <h1>Reception Desk</h1>
+      <p>CityCare Hospital•Clinic Queue Management</p>
+    </div>
+   
+
+    <div class="tabs">
+      <a href="/receptionist.html" class="active">
+        Receptionist
+      </a>
+
+      <a href="/waitingroom.html">
+        Patient
+      </a>
+    </div>
+  </div>
+
+  <div class="grid-3">
+
+    <!-- ADD PATIENT -->
+
+    <div class="card">
+      <h2>
+        <span class="icon-dot"></span>
+        Add Patient
+      </h2>
+
+      <input
+        type="text"
+        id="patientName"
+        placeholder="Patient name"
+      />
+
+      <label
+        class="field-label"
+        for="patientTime"
+      >
+        Consultation Time
+      </label>
+
+      <div
+        class="slider-value"
+        id="patientTimeValue"
+      >
+        5 min
+      </div>
+
+      <input
+        type="range"
+        id="patientTime"
+        min="1"
+        max="30"
+        value="5"
+      />
+
+      <button id="addBtn">
+        Add To Queue
+      </button>
+    </div>
+
+    <!-- CURRENTLY SERVING -->
+
+    <div class="card">
+
+      <h2>
+        <span class="icon-dot"></span>
+        Currently Serving
+      </h2>
+
+      <div
+        class="serving-panel idle"
+        id="servingPanel"
+      >
+        <div
+          class="token-num"
+          id="currentToken"
+        >
+          No token called
+        </div>
+      </div>
+
+      <div class="action-buttons">
+
+        <button
+          class="call-next"
+          id="callNextBtn"
+        >
+          Call Next
+        </button>
+
+        <button
+          class="skip-btn"
+          id="skipBtn"
+        >
+          Skip Patient
+        </button>
+
+      </div>
+
+      <br>
+
+      <button
+        class="reset-btn"
+        id="resetBtn"
+      >
+        Reset Queue
+      </button>
+
+    </div>
+
+    <!-- STATS -->
+
+    <div class="card">
+
+      <h2>
+        <span class="icon-dot"></span>
+        Queue Summary
+      </h2>
+
+      <div class="stat-line">
+        <span class="stat-label">
+          Queue Length
+        </span>
+
+        <span
+          class="stat-value"
+          id="queueLen"
+        >
+          0
+        </span>
+      </div>
+
+      <div class="stat-line">
+        <span class="stat-label">
+          Total Wait
+        </span>
+
+        <span
+          class="stat-value warn"
+          id="totalWait"
+        >
+          0 min
+        </span>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- QUEUE -->
+
+  <div class="card">
+
+    <h2>
+      <span class="icon-dot"></span>
+      Waiting Queue
+      (
+      <span id="waitCount">0</span>
+      )
+    </h2>
+
+    <div
+      class="queue-grid"
+      id="queueGrid"
+    >
+      <div class="empty-state">
+        No patients waiting
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+
+<script>
+
+const socket = io();
+
+const currentToken =
+  document.getElementById("currentToken");
+
+const servingPanel =
+  document.getElementById("servingPanel");
+
+const queueGrid =
+  document.getElementById("queueGrid");
+
+const waitCount =
+  document.getElementById("waitCount");
+
+const queueLen =
+  document.getElementById("queueLen");
+
+const totalWait =
+  document.getElementById("totalWait");
+
+const patientTime =
+  document.getElementById("patientTime");
+
+const patientTimeValue =
+  document.getElementById("patientTimeValue");
+
+// ===== SLIDER =====
+
+patientTime.addEventListener(
+  "input",
+  () => {
+    patientTimeValue.textContent =
+      `${patientTime.value} min`;
+  }
+);
+
+// ===== ADD PATIENT =====
+
+document
+.getElementById("addBtn")
+.addEventListener("click", () => {
+
+  const nameInput =
+    document.getElementById("patientName");
+
+  if (!nameInput.value.trim()) {
+
+    alert(
+      "Please enter patient name"
+    );
+
+    return;
+  }
+
+  socket.emit(
+    "add-patient",
+    {
+      name:
+        nameInput.value.trim(),
+
+      consultMinutes:
+        Number(patientTime.value)
+    }
+  );
+
+  nameInput.value = "";
+
+  patientTime.value = 5;
+
+  patientTimeValue.textContent =
+    "5 min";
+
+});
+
+// ===== CALL NEXT =====
+
+document
+.getElementById("callNextBtn")
+.addEventListener("click", () => {
+
+  socket.emit("call-next");
+
+});
+
+// ===== SKIP =====
+
+document
+.getElementById("skipBtn")
+.addEventListener("click", () => {
+
+  socket.emit("skip-patient");
+
+});
+
+// ===== RESET =====
+
+document
+.getElementById("resetBtn")
+.addEventListener("click", () => {
+
+  const confirmReset =
+    confirm(
+      "Reset entire queue?"
+    );
+
+  if (confirmReset) {
+
+    socket.emit("reset-queue");
+
+  }
+
+});
+
+// ===== STATE UPDATE =====
+
+socket.on(
+  "state-update",
+  (state) => {
+
+    document
+    .getElementById(
+      "callNextBtn"
+    )
+    .disabled =
+      state.waitingQueue.length === 0;
+
+    if (
+      state.currentlyServing
+    ) {
+
+      servingPanel
+      .classList
+      .remove("idle");
+
+      currentToken.innerHTML = `
+        <div>
+          #${state.currentlyServing.token}
+        </div>
+
+        <div class="pname">
+          ${state.currentlyServing.name}
+        </div>
+
+        <div class="ptime">
+          ${state.currentlyServing.consultMinutes} min
+          •
+          ${new Date(
+            state.currentlyServing.calledAt
+          ).toLocaleTimeString()}
+        </div>
+      `;
+
+    }
+
+    else {
+
+      servingPanel
+      .classList
+      .add("idle");
+
+      currentToken.textContent =
+        "No token called";
+
+    }
+
+    waitCount.textContent =
+      state.totalWaiting;
+
+    queueLen.textContent =
+      state.totalWaiting;
+
+    totalWait.textContent =
+      `${state.totalQueueMinutes} min`;
+
+    if (
+      state.waitingQueue.length === 0
+    ) {
+
+      queueGrid.innerHTML = `
+        <div class="empty-state">
+          No patients waiting
+        </div>
+      `;
+
+      return;
+    }
+
+    queueGrid.innerHTML =
+      state.waitingQueue
+      .map((p,i)=>`
+
+      <div
+        class="queue-card
+        ${i===0?"next":""}"
+      >
+
+        <div class="row1">
+
+          <span class="qtoken">
+            #${p.token}
+          </span>
+
+          ${
+            i===0
+            ?
+            '<span class="badge-next">NEXT</span>'
+            :
+            ''
+          }
+
+        </div>
+
+        <div class="qname">
+          ${p.name}
+          <span class="qtime">
+            (${p.consultMinutes} min)
+          </span>
+        </div>
+
+        <div class="qahead">
+          ${p.patientsAhead}
+          patient${p.patientsAhead!==1?"s":""}
+          ahead
+        </div>
+
+        <div class="qwait">
+          Wait:
+          ~${p.estimatedWaitMinutes}
+          min
+        </div>
+
+        <div class="calltime">
+          Expected:
+          ${new Date(
+            p.expectedCallTime
+          ).toLocaleTimeString()}
+        </div>
+
+      </div>
+
+      `)
+      .join("");
+
+});
+
+</script>
+
+</body>
+</html>
+

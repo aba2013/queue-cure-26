@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Queue Cure — Waiting Room</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="page">
+
+    <div class="top-row">
+      <div class="title-block">
+        <h1>Waiting Room</h1>
+        <p>CityCare Hospital • Clinic Queue Management</p>
+        <p>Live Queue Status</p>
+      </div>
+
+ 
+
+      <div class="tabs">
+        <a href="/receptionist.html">Receptionist</a>
+        <a href="/waitingroom.html" class="active">Patient</a>
+      </div>
+    </div>
+
+    <div class="hero-serving">
+      <div class="hero-label">Now Serving</div>
+
+      <div class="hero-token" id="heroToken">
+        —
+      </div>
+
+      <div class="hero-name" id="heroName">
+        Waiting for next call
+      </div>
+
+      <div class="hero-time" id="heroTime"></div>
+    </div>
+
+    <div class="tile-row">
+      <div class="tile">
+        <div class="tile-num" id="tileQueue">0</div>
+        <div class="tile-label">Patients Waiting</div>
+      </div>
+
+      <div class="tile">
+        <div class="tile-num warn" id="tileWait">0</div>
+        <div class="tile-label">Total Wait (Min)</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>
+        <span class="icon-dot"></span>
+        Upcoming Queue
+      </h2>
+
+      <div class="queue-grid" id="queueGrid">
+        <div class="empty-state">
+          No one is waiting right now
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>
+        <span class="icon-dot"></span>
+        Recently Served
+      </h2>
+
+      <div id="historyGrid" class="queue-grid">
+        <div class="empty-state">
+          No completed consultations yet
+        </div>
+      </div>
+    </div>
+
+    <div class="live-indicator">
+      <span class="live-dot"></span>
+      Live updates enabled
+    </div>
+
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+
+  <script>
+    const socket = io();
+
+    let lastToken = null;
+
+    const heroToken = document.getElementById("heroToken");
+    const heroName = document.getElementById("heroName");
+    const heroTime = document.getElementById("heroTime");
+
+    const tileQueue = document.getElementById("tileQueue");
+    const tileWait = document.getElementById("tileWait");
+
+    const queueGrid = document.getElementById("queueGrid");
+    const historyGrid = document.getElementById("historyGrid");
+
+    socket.on("state-update", (state) => {
+
+      // ===== CURRENT PATIENT =====
+
+      if (state.currentlyServing) {
+
+        if (
+          lastToken !== state.currentlyServing.token
+        ) {
+          lastToken = state.currentlyServing.token;
+
+          const audio = new Audio(
+            "https://www.soundjay.com/buttons/sounds/button-09.mp3"
+          );
+
+          audio.play().catch(() => {});
+        }
+
+        heroToken.textContent =
+          `#${state.currentlyServing.token}`;
+
+        heroName.textContent =
+          state.currentlyServing.name;
+
+        heroTime.textContent =
+          `Called at ${new Date(
+            state.currentlyServing.calledAt
+          ).toLocaleTimeString()}`;
+
+      } else {
+
+        heroToken.textContent = "—";
+        heroName.textContent =
+          "Waiting for next call";
+        heroTime.textContent = "";
+
+      }
+
+      // ===== STATS =====
+
+      tileQueue.textContent =
+        state.totalWaiting;
+
+      tileWait.textContent =
+        state.totalQueueMinutes;
+
+      // ===== QUEUE =====
+
+      if (
+        state.waitingQueue.length === 0
+      ) {
+
+        queueGrid.innerHTML = `
+          <div class="empty-state">
+            No one is waiting right now
+          </div>
+        `;
+
+      } else {
+
+        queueGrid.innerHTML =
+          state.waitingQueue
+            .map((p, i) => `
+              <div class="queue-card ${i === 0 ? "next" : ""}">
+
+                <div class="row1">
+                  <span class="qtoken">
+                    #${p.token}
+                  </span>
+
+                  ${
+                    i === 0
+                      ? '<span class="badge-next">YOU ARE NEXT</span>'
+                      : ''
+                  }
+                </div>
+
+                <div class="qname">
+                  ${p.name}
+                </div>
+
+                <div class="qahead">
+                  ${p.patientsAhead}
+                  patient${p.patientsAhead !== 1 ? "s" : ""}
+                  ahead
+                </div>
+
+                <div class="qwait">
+                  Wait: ~${p.estimatedWaitMinutes} min
+                </div>
+
+                <div class="calltime">
+                  Expected:
+                  ${new Date(
+                    p.expectedCallTime
+                  ).toLocaleTimeString()}
+                </div>
+
+              </div>
+            `)
+            .join("");
+
+      }
+
+      // ===== HISTORY =====
+
+      if (
+        !state.recentlyServed ||
+        state.recentlyServed.length === 0
+      ) {
+
+        historyGrid.innerHTML = `
+          <div class="empty-state">
+            No completed consultations yet
+          </div>
+        `;
+
+      } else {
+
+        historyGrid.innerHTML =
+          state.recentlyServed
+            .map(patient => `
+              <div class="queue-card">
+
+                <div class="row1">
+                  <span class="qtoken">
+                    #${patient.token}
+                  </span>
+                </div>
+
+                <div class="qname">
+                  ${patient.name}
+                </div>
+
+                <div class="qwait">
+                  Consultation Completed
+                </div>
+
+              </div>
+            `)
+            .join("");
+
+      }
+
+    });
+  </script>
+
+</body>
+</html>
+

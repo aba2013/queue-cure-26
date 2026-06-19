@@ -1,0 +1,14 @@
+{
+  "name": "queue-cure",
+  "version": "1.0.0",
+  "description": "Queue Cure '26 — real-time clinic token queue",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.0",
+    "socket.io": "^4.8.0"
+  }
+}
