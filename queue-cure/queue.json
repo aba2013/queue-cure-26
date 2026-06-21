@@ -1,50 +1,6 @@
 {
-  "nextTokenNumber": 8,
+  "nextTokenNumber": 1,
   "currentlyServing": null,
-  "waitingQueue": [
-    {
-      "token": 5,
-      "name": "kaushiki",
-      "consultMinutes": 5,
-      "addedAt": 1781879639334
-    },
-    {
-      "token": 6,
-      "name": "siva",
-      "consultMinutes": 10,
-      "addedAt": 1781879648151
-    },
-    {
-      "token": 7,
-      "name": "aryi",
-      "consultMinutes": 20,
-      "addedAt": 1781879661638
-    }
-  ],
-  "history": [
-    {
-      "token": 1,
-      "name": "kaushiki",
-      "consultMinutes": 5,
-      "addedAt": 1781876465342,
-      "calledAt": 1781876557518,
-      "finishedAt": 1781876577466
-    },
-    {
-      "token": 2,
-      "name": "sira",
-      "consultMinutes": 9,
-      "addedAt": 1781876475047,
-      "calledAt": 1781876577466,
-      "finishedAt": 1781876725761
-    },
-    {
-      "token": 4,
-      "name": "kavin",
-      "consultMinutes": 5,
-      "addedAt": 1781876517805,
-      "calledAt": 1781876725761,
-      "finishedAt": 1781876728976
-    }
-  ]
+  "waitingQueue": [],
+  "history": []
 }

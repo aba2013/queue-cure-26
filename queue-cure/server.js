@@ -1,32 +1,23 @@
-/**
- * Queue Cure '26
- * Final Backend Version
- * Features:
- * - Real-time Socket.IO updates
- * - Queue persistence
- * - Skip patient
- * - Dynamic wait times
- * - Patients ahead count
- * - Expected call time
- * - History tracking
- */
-
 const express = require("express");
 const http = require("http");
-const { Server } = require("socket.io");
 const fs = require("fs");
+const path = require("path");
+const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-
-const SAVE_FILE = "queue.json";
 
 app.use(express.static("public"));
 
 app.get("/", (req, res) => {
   res.redirect("/receptionist.html");
 });
+
+const STATE_FILE = path.join(
+  __dirname,
+  "queue.json"
+);
 
 // ================= STATE =================
 
@@ -35,177 +26,380 @@ let currentlyServing = null;
 let waitingQueue = [];
 let history = [];
 
-// ================= PERSISTENCE =================
+// ================= HELPERS =================
+
+function freshState() {
+  return {
+    nextTokenNumber: 1,
+    currentlyServing: null,
+    waitingQueue: [],
+    history: []
+  };
+}
 
 function saveState() {
-  try {
-    fs.writeFileSync(
-      SAVE_FILE,
-      JSON.stringify(
-        {
-          nextTokenNumber,
-          currentlyServing,
-          waitingQueue,
-          history,
-        },
-        null,
-        2
-      )
-    );
-  } catch (err) {
-    console.error("Failed to save queue:", err);
-  }
+  const data = {
+    nextTokenNumber,
+    currentlyServing,
+    waitingQueue,
+    history
+  };
+
+  fs.writeFileSync(
+    STATE_FILE,
+    JSON.stringify(data, null, 2)
+  );
 }
 
 function loadState() {
   try {
-    if (!fs.existsSync(SAVE_FILE)) return;
 
-    const data = JSON.parse(
-      fs.readFileSync(SAVE_FILE, "utf8")
+    if (!fs.existsSync(STATE_FILE)) {
+
+      const fresh = freshState();
+
+      nextTokenNumber =
+        fresh.nextTokenNumber;
+
+      currentlyServing =
+        fresh.currentlyServing;
+
+      waitingQueue =
+        fresh.waitingQueue;
+
+      history =
+        fresh.history;
+
+      saveState();
+
+      return;
+    }
+
+    const raw =
+      fs.readFileSync(
+        STATE_FILE,
+        "utf8"
+      );
+
+    const data =
+      JSON.parse(raw);
+
+    nextTokenNumber =
+      data.nextTokenNumber ?? 1;
+
+    currentlyServing =
+      data.currentlyServing ?? null;
+
+    waitingQueue =
+      data.waitingQueue ?? [];
+
+    history =
+      data.history ?? [];
+
+  }
+
+  catch (err) {
+
+    console.log(
+      "Failed to load state. Starting fresh."
     );
 
-    nextTokenNumber = data.nextTokenNumber || 1;
-    currentlyServing = data.currentlyServing || null;
-    waitingQueue = data.waitingQueue || [];
-    history = data.history || [];
+    const fresh = freshState();
 
-    console.log("Queue restored successfully");
-  } catch (err) {
-    console.error("Failed to load queue:", err);
+    nextTokenNumber =
+      fresh.nextTokenNumber;
+
+    currentlyServing =
+      fresh.currentlyServing;
+
+    waitingQueue =
+      fresh.waitingQueue;
+
+    history =
+      fresh.history;
+
+    saveState();
   }
 }
 
 loadState();
 
-// ================= HELPERS =================
+// ================= PUBLIC STATE =================
 
 function buildPublicState() {
+
   let cumulative = 0;
 
-  const queueWithWaitTimes = waitingQueue.map(
-    (patient, index) => {
-      const estimatedWaitMinutes = cumulative;
+  const queueWithWaitTimes =
+    waitingQueue.map(
+      (patient, index) => {
 
-      cumulative += patient.consultMinutes;
+        const estimatedWaitMinutes =
+          cumulative;
 
-      return {
-        ...patient,
-        position: index + 1,
-        patientsAhead: index,
-        estimatedWaitMinutes,
+        cumulative +=
+          patient.consultMinutes;
 
-        expectedCallTime:
-          Date.now() +
-          estimatedWaitMinutes * 60 * 1000,
-      };
-    }
-  );
+        return {
+
+          ...patient,
+
+          position:
+            index + 1,
+
+          patientsAhead:
+            index,
+
+          estimatedWaitMinutes,
+
+          expectedCallTime:
+            Date.now() +
+            estimatedWaitMinutes *
+            60 *
+            1000
+
+        };
+      }
+    );
 
   return {
+
     currentlyServing,
-    waitingQueue: queueWithWaitTimes,
-    totalWaiting: waitingQueue.length,
-    totalQueueMinutes: cumulative,
-    recentlyServed: history.slice(-5).reverse(),
+
+    waitingQueue:
+      queueWithWaitTimes,
+
+    totalWaiting:
+      waitingQueue.length,
+
+    totalQueueMinutes:
+      cumulative,
+
+    recentlyServed:
+      history
+        .slice(-10)
+        .reverse()
+
   };
 }
 
 function broadcastState() {
+
   saveState();
-  io.emit("state-update", buildPublicState());
+
+  io.emit(
+    "state-update",
+    buildPublicState()
+  );
 }
 
 // ================= SOCKETS =================
 
-io.on("connection", (socket) => {
-  console.log("Client connected");
+io.on(
+  "connection",
+  (socket) => {
 
-  socket.emit("state-update", buildPublicState());
+    socket.emit(
+      "state-update",
+      buildPublicState()
+    );
 
-  // -------- ADD PATIENT --------
+    // ===== ADD PATIENT =====
 
-  socket.on("add-patient", (payload) => {
-    const name =
-      payload?.name?.trim() ||
-      `Patient ${nextTokenNumber}`;
+    socket.on(
+      "add-patient",
+      (payload) => {
 
-    const consultMinutes =
-      Number(payload?.consultMinutes) > 0
-        ? Number(payload.consultMinutes)
-        : 5;
+        const name =
+          (
+            payload?.name ||
+            `Patient ${nextTokenNumber}`
+          ).trim();
 
-    waitingQueue.push({
-      token: nextTokenNumber,
-      name,
-      consultMinutes,
-      addedAt: Date.now(),
-    });
+        const parsed =
+          Number(
+            payload?.consultMinutes
+          );
 
-    nextTokenNumber++;
+        const consultMinutes =
+          Number.isFinite(parsed) &&
+          parsed > 0
+            ? parsed
+            : 5;
 
-    broadcastState();
-  });
+        waitingQueue.push({
 
-  // -------- CALL NEXT --------
+          token:
+            nextTokenNumber,
 
-  socket.on("call-next", () => {
-    if (currentlyServing) {
-      history.push({
-        ...currentlyServing,
-        finishedAt: Date.now(),
-      });
-    }
+          name,
 
-    if (waitingQueue.length === 0) {
-      currentlyServing = null;
-      broadcastState();
-      return;
-    }
+          consultMinutes,
 
-    const nextPatient = waitingQueue.shift();
+          addedAt:
+            Date.now()
 
-    currentlyServing = {
-      ...nextPatient,
-      calledAt: Date.now(),
-    };
+        });
 
-    broadcastState();
-  });
+        nextTokenNumber++;
 
-  // -------- SKIP PATIENT --------
+        broadcastState();
 
-  socket.on("skip-patient", () => {
-    if (waitingQueue.length <= 1) return;
+      }
+    );
 
-    const skippedPatient =
-      waitingQueue.shift();
+    // ===== CALL NEXT =====
 
-    waitingQueue.push(skippedPatient);
+    socket.on(
+      "call-next",
+      () => {
 
-    broadcastState();
-  });
+        if (
+          currentlyServing
+        ) {
 
-  // -------- RESET QUEUE --------
+          history.push({
 
-  socket.on("reset-queue", () => {
-    waitingQueue = [];
-    currentlyServing = null;
+            ...currentlyServing,
 
-    broadcastState();
-  });
+            finishedAt:
+              Date.now(),
 
-  socket.on("disconnect", () => {
-    console.log("Client disconnected");
-  });
-});
+            status:
+              "completed"
+
+          });
+
+        }
+
+        if (
+          waitingQueue.length === 0
+        ) {
+
+          currentlyServing =
+            null;
+
+          broadcastState();
+
+          return;
+        }
+
+        const nextPatient =
+          waitingQueue.shift();
+
+        currentlyServing = {
+
+          ...nextPatient,
+
+          calledAt:
+            Date.now()
+
+        };
+
+        broadcastState();
+
+      }
+    );
+
+    // ===== SKIP PATIENT =====
+
+    socket.on(
+      "skip-patient",
+      () => {
+
+        if (
+          currentlyServing
+        ) {
+
+          history.push({
+
+            ...currentlyServing,
+
+            finishedAt:
+              Date.now(),
+
+            status:
+              "skipped"
+
+          });
+
+        }
+
+        if (
+          waitingQueue.length === 0
+        ) {
+
+          currentlyServing =
+            null;
+
+          broadcastState();
+
+          return;
+        }
+
+        const nextPatient =
+          waitingQueue.shift();
+
+        currentlyServing = {
+
+          ...nextPatient,
+
+          calledAt:
+            Date.now()
+
+        };
+
+        broadcastState();
+
+      }
+    );
+
+    // ===== RESET =====
+
+    socket.on(
+      "reset-queue",
+      () => {
+
+        const fresh =
+          freshState();
+
+        nextTokenNumber =
+          fresh.nextTokenNumber;
+
+        currentlyServing =
+          fresh.currentlyServing;
+
+        waitingQueue =
+          fresh.waitingQueue;
+
+        history =
+          fresh.history;
+
+        broadcastState();
+
+      }
+    );
+
+    socket.on(
+      "disconnect",
+      () => {}
+    );
+
+  }
+);
 
 // ================= START =================
 
-const PORT = process.env.PORT || 3000;
+const PORT =
+  process.env.PORT || 3000;
 
-server.listen(PORT, () => {
-  console.log(
-    `Queue Cure running on http://localhost:${PORT}`
-  );
-});
+server.listen(
+  PORT,
+  () => {
+
+    console.log(
+      `Queue Cure running on http://localhost:${PORT}`
+    );
+
+  }
+);
