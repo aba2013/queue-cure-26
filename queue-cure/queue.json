@@ -1,6 +1,35 @@
 {
-  "nextTokenNumber": 1,
-  "currentlyServing": null,
-  "waitingQueue": [],
-  "history": []
+  "nextTokenNumber": 5,
+  "currentlyServing": {
+    "token": 2,
+    "name": "Raman",
+    "consultMinutes": 5,
+    "addedAt": 1782030526466,
+    "calledAt": 1782030753414
+  },
+  "waitingQueue": [
+    {
+      "token": 3,
+      "name": "Sai",
+      "consultMinutes": 16,
+      "addedAt": 1782030536529
+    },
+    {
+      "token": 4,
+      "name": "Kiran",
+      "consultMinutes": 20,
+      "addedAt": 1782030691731
+    }
+  ],
+  "history": [
+    {
+      "token": 1,
+      "name": "Kaushiki",
+      "consultMinutes": 10,
+      "addedAt": 1782030520919,
+      "calledAt": 1782030713333,
+      "finishedAt": 1782030753414,
+      "status": "completed"
+    }
+  ]
 }
